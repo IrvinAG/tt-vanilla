@@ -1,0 +1,170 @@
+version: "3.9"
+
+services:
+  # ── Bases de datos ──────────────────────────────────
+  auth-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_pass
+      POSTGRES_DB: auth_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinica-network
+
+  patient-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: patient_user
+      POSTGRES_PASSWORD: patient_pass
+      POSTGRES_DB: patient_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - patient_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U patient_user -d patient_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinica-network
+
+  notes-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: notes_user
+      POSTGRES_PASSWORD: notes_pass
+      POSTGRES_DB: notes_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - notes_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes_user -d notes_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinica-network
+
+  audit-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: audit_user
+      POSTGRES_PASSWORD: audit_pass
+      POSTGRES_DB: audit_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - audit_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit_user -d audit_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinica-network
+
+  # ── Servicios ───────────────────────────────────────
+  auth-service:
+    build: ./auth-service
+    ports:
+      - "8001:8001"
+    env_file: .env
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks:
+      - clinica-network
+
+  patient-service:
+    build: ./patient-service
+    ports:
+      - "8002:8002"
+    env_file: .env
+    depends_on:
+      patient-db:
+        condition: service_healthy
+    networks:
+      - clinica-network
+
+  notes-service:
+    build: ./notes-service
+    ports:
+      - "8003:8003"
+    env_file: .env
+    depends_on:
+      notes-db:
+        condition: service_healthy
+    networks:
+      - clinica-network
+
+  audit-service:
+    build: ./audit-service
+    ports:
+      - "8004:8004"
+    env_file: .env
+    depends_on:
+      audit-db:
+        condition: service_healthy
+    networks:
+      - clinica-network
+
+  # ── Gateway ─────────────────────────────────────────
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - auth-service
+      - patient-service
+      - notes-service
+      - audit-service
+    networks:
+      - clinica-network
+
+  # ── pgAdmin ────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    networks:
+      - clinica-network
+
+  # ── Seed ────────────────────────────────────────────
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.seed
+    command: python seed.py
+    env_file: .env
+    depends_on:
+      auth-service:
+        condition: service_started
+    restart: "no"
+    networks:
+      - clinica-network
+
+volumes:
+  auth_data:
+  patient_data:
+  notes_data:
+  audit_data:
+
+networks:
+  clinica-network:
+    driver: bridge
