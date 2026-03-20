@@ -38,23 +38,23 @@ USERS = [
 ]
 
 
-def wait_for_db(engine, retries=30, delay=2):
+def wait_for_table(engine, retries=30, delay=2):
     for i in range(retries):
         try:
             with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+                conn.execute(text("SELECT 1 FROM profesionales_salud LIMIT 0"))
             return True
         except Exception:
-            print(f"  Esperando base de datos... ({i + 1}/{retries})")
+            print(f"  Esperando que auth-service cree las tablas... ({i + 1}/{retries})")
             time.sleep(delay)
-    raise RuntimeError("No se pudo conectar a la base de datos")
+    raise RuntimeError("No se pudo conectar a la base de datos o la tabla no existe")
 
 
 def main():
     print("\n=== Seed de datos iniciales ===\n")
 
     engine = create_engine(AUTH_DB_URL)
-    wait_for_db(engine)
+    wait_for_table(engine)
 
     Session = sessionmaker(bind=engine)
     session = Session()
